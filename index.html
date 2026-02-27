@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cube Snake Fixed</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+</style>
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+<script>
+const SIZE = 16;
+const HALF = SIZE/2;
+const SPEED = 200;
+
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+let camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,0.5));
+let light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,20,10);
+scene.add(light);
+
+// Cube wireframe
+scene.add(new THREE.Mesh(
+  new THREE.BoxGeometry(SIZE,SIZE,SIZE),
+  new THREE.MeshBasicMaterial({color:0x3333ff, wireframe:true})
+));
+
+// Snake data
+let snake = [];
+let direction = new THREE.Vector3(1,0,0);
+let normal = new THREE.Vector3(0,0,1);
+let head = new THREE.Vector3(0,0,HALF);
+
+function createBlock(pos,color=0x00ff00){
+  let m = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9,0.9,0.9),
+    new THREE.MeshStandardMaterial({color})
+  );
+  m.position.copy(pos);
+  scene.add(m);
+  return m;
+}
+
+// Initialize snake
+snake.push(createBlock(head.clone()));
+snake.push(createBlock(head.clone().add(new THREE.Vector3(-1,0,0))));
+snake.push(createBlock(head.clone().add(new THREE.Vector3(-2,0,0))));
+
+// Food
+let food = createBlock(randomSurfacePosition(),0xff0000);
+
+function randomSurfacePosition(){
+  let axis = Math.floor(Math.random()*3);
+  let sign = Math.random()>0.5?1:-1;
+  let pos = new THREE.Vector3(
+    Math.floor(Math.random()*SIZE-HALF),
+    Math.floor(Math.random()*SIZE-HALF),
+    Math.floor(Math.random()*SIZE-HALF)
+  );
+  if(axis===0) pos.x = sign*HALF;
+  if(axis===1) pos.y = sign*HALF;
+  if(axis===2) pos.z = sign*HALF;
+  return pos;
+}
+
+// 🔥 FULL FIXED EDGE SYSTEM
+function wrapToNextFace(){
+
+  // determine which axis we crossed
+  let axes = ["x","y","z"];
+
+  for(let axis of axes){
+    if(Math.abs(head[axis]) > HALF){
+
+      let sign = Math.sign(head[axis]);
+
+      // clamp to surface
+      head[axis] = sign * HALF;
+
+      // compute new normal
+      let newNormal = new THREE.Vector3(0,0,0);
+      newNormal[axis] = sign;
+
+      // rotation axis = cross product
+      let rotationAxis = new THREE.Vector3().crossVectors(normal,newNormal);
+
+      if(rotationAxis.length() > 0){
+        rotationAxis.normalize();
+
+        direction.applyAxisAngle(rotationAxis,Math.PI/2);
+      }
+
+      normal.copy(newNormal);
+    }
+  }
+}
+
+function move(){
+  head.add(direction);
+
+  wrapToNextFace();
+
+  if(head.distanceTo(food.position) < 0.1){
+    food.position.copy(randomSurfacePosition());
+  } else {
+    let tail = snake.pop();
+    scene.remove(tail);
+  }
+
+  snake.unshift(createBlock(head.clone()));
+}
+
+// Controls
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowLeft"){
+    direction.applyAxisAngle(normal,Math.PI/2);
+  }
+  if(e.key==="ArrowRight"){
+    direction.applyAxisAngle(normal,-Math.PI/2);
+  }
+  if(e.key==="ArrowDown"){
+    direction.negate();
+  }
+});
+
+// Camera follow
+function updateCamera(){
+  let camOffset = normal.clone().multiplyScalar(8)
+      .add(direction.clone().multiplyScalar(-6));
+
+  let target = head.clone().add(camOffset);
+
+  camera.position.lerp(target,0.15);
+  camera.up.lerp(normal,0.2);
+  camera.lookAt(head);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  updateCamera();
+  renderer.render(scene,camera);
+}
+animate();
+
+setInterval(move,SPEED);
+
+</script>
+</body>
+</html>
